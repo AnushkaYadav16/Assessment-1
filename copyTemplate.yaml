@@ -31,10 +31,10 @@ Resources:
       BucketName: !Ref DestinationBucketName
 
   # S3 Bucket for Lambda Code (to store Lambda zip)
-  LambdaCodeBucket:
-    Type: 'AWS::S3::Bucket'
-    Properties:
-      BucketName: !Ref LambdaCodeBucketName
+  # LambdaCodeBucket:
+  #   Type: 'AWS::S3::Bucket'
+  #   Properties:
+  #     BucketName: !Ref LambdaCodeBucketName
 
   # Lambda Execution Role for Permissions
   LambdaExecutionRole:
@@ -65,7 +65,7 @@ Resources:
   S3CopyLambda:
     Type: 'AWS::Lambda::Function'
     Properties:
-      Handler: 'lambda_function.lambda_handler'
+      Handler: 'lambda.lambda_handler'
       Role: !GetAtt LambdaExecutionRole.Arn
       FunctionName: 'S3CopyFunction'
       Runtime: 'python3.8'
@@ -76,3 +76,12 @@ Resources:
         Variables:
           SOURCE_BUCKET: !Ref SourceBucketName
           DEST_BUCKET: !Ref DestinationBucketName
+
+
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref S3CopyLambda
+      Action: 'lambda:InvokeFunction'
+      Principal: 's3.amazonaws.com'
+      SourceArn: !Sub 'arn:aws:s3:::${SourceBucketName}'
