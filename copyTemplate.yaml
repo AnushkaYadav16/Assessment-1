@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  SourceBucketName:
+    Type: String
+    Description: The name of the source S3 bucket.
+  
+  DestinationBucketName:
+    Type: String
+    Description: The name of the destination S3 bucket.
+
+  LambdaCodeBucketName:
+    Type: String
+    Description: The name of the S3 bucket to store the Lambda function zip file.
+
+Resources:
+  
+  # S3 Bucket 1 (Source Bucket)
+  SourceBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref SourceBucketName
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: 's3:ObjectCreated:*'
+            Function: !GetAtt S3CopyLambda.Arn
+
+  # S3 Bucket 2 (Destination Bucket)
+  DestinationBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref DestinationBucketName
+
+  # S3 Bucket for Lambda Code (to store Lambda zip)
+  LambdaCodeBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref LambdaCodeBucketName
+
+  # Lambda Execution Role for Permissions
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'lambda.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'S3CopyPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 's3:GetObject'
+                Resource: !Sub 'arn:aws:s3:::${SourceBucketName}/*'
+              - Effect: 'Allow'
+                Action:
+                  - 's3:PutObject'
+                Resource: !Sub 'arn:aws:s3:::${DestinationBucketName}/*'
+
+  # Lambda Function (Python)
+  S3CopyLambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Handler: 'lambda_function.lambda_handler'
+      Role: !GetAtt LambdaExecutionRole.Arn
+      FunctionName: 'S3CopyFunction'
+      Runtime: 'python3.8'
+      Code:
+        S3Bucket: !Ref LambdaCodeBucketName  # Lambda code is stored in the LambdaCodeBucket
+        S3Key: 'lambda.zip'            # Lambda code (zipped file)
+      Environment:
+        Variables:
+          SOURCE_BUCKET: !Ref SourceBucketName
+          DEST_BUCKET: !Ref DestinationBucketName
