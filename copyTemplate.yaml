@@ -47,6 +47,8 @@ Resources:
             Principal:
               Service: 'lambda.amazonaws.com'
             Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
         - PolicyName: 'S3CopyPolicy'
           PolicyDocument:
@@ -61,7 +63,7 @@ Resources:
                   - 's3:PutObject'
                 Resource: !Sub 'arn:aws:s3:::${DestinationBucketName}/*'
 
-  # Lambda Function (Python)
+  
   S3CopyLambda:
     Type: 'AWS::Lambda::Function'
     Properties:
@@ -70,8 +72,8 @@ Resources:
       FunctionName: 'S3CopyFunction'
       Runtime: 'python3.8'
       Code:
-        S3Bucket: !Ref LambdaCodeBucketName  # Lambda code is stored in the LambdaCodeBucket
-        S3Key: 'lambda.zip'            # Lambda code (zipped file)
+        S3Bucket: !Ref LambdaCodeBucketName  
+        S3Key: 'lambda.zip'            
       Environment:
         Variables:
           SOURCE_BUCKET: !Ref SourceBucketName
