@@ -1,30 +1,158 @@
-#aws s3 cp C:\Users\anushka.yadav02\Documents\VSCODE\Training-py\Files\Salary.pdf s3://my-source-bucket-4243/
+import subprocess
+import argparse
+import os
 
-create stack -
-aws cloudformation create-stack --stack-name S3LambdaStack --template-body file://copyTemplate.yaml --capabilities CAPABILITY_IAM --parameters ParameterKey=SourceBucketName,ParameterValue=your-source-bucket-name-123 ParameterKey=DestinationBucketName,ParameterValue=your-destination-bucket-name-123 ParameterKey=LambdaCodeBucketName,ParameterValue=copylambdafuncbucket
+# Function to parse the command-line arguments
+def parse_args():
+    """Parses the command-line arguments."""
+    # Define the argument parser for this script
+    parser = argparse.ArgumentParser(description='Automated Deployment Script for Lambda + CloudFormation + S3')
+    
+    # Define all the arguments that the user will provide when running the script
+    parser.add_argument('--lambda-directory', required=True, help='Path to the Lambda function directory')
+    parser.add_argument('--zip-file-path', required=True, help='Path to store the ZIP file for Lambda function')
+    parser.add_argument('--lambda-code-bucket', required=True, help='S3 bucket name for Lambda code')
+    parser.add_argument('--zip-file-key', required=True, help='S3 key for the ZIP file')
+    parser.add_argument('--region', required=True, help='AWS region')
+    parser.add_argument('--stack-name', required=True, help='CloudFormation stack name')
+    parser.add_argument('--template', required=True, help='Path to CloudFormation template')
+    parser.add_argument('--source-bucket', required=True, help='Source S3 bucket for test file')
+    parser.add_argument('--destination-bucket', required=True, help='Destination S3 bucket for Lambda triggers')
+    parser.add_argument('--test-file', required=True, help='Path to the test file for uploading')
 
-update stack - aws cloudformation update-stack --stack-name S3LambdaStack --template-body file://copyTemplate.yaml --capabilities CAPABILITY_IAM --parameters ParameterKey=SourceBucketName,ParameterValue=your-source-bucket-name-123 ParameterKey=DestinationBucketName,ParameterValue=your-destination-bucket-name-123
+    # Return the parsed arguments
+    return parser.parse_args()
 
-delete stack - aws cloudformation delete-stack --stack-name S3LambdaStack
+# Function to run a shell command (e.g., AWS CLI command)
+def run_subprocess(command):
+    """Helper function to run a shell command and handle errors."""
+    # Execute the command and capture stdout and stderr
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
+    # Check if the command was successful (returncode = 0 means success)
+    if result.returncode != 0:
+        # If there is an error, print the error message and raise an exception
+        print(f"Error running command: {command}")
+        print(f"Error: {result.stderr.decode()}")
+        raise Exception(f"Command failed: {command}")
+    
+    # Print the output of the command (stdout)
+    print(result.stdout.decode())
+
+# Function to run the Python script (to zip and upload the Lambda function)
+import subprocess
+import shlex
+
+import subprocess
+
+import subprocess
+
+def run_python_script(script, args):
+    """Run the Python script to zip and upload Lambda function."""
+    # Ensure you're calling python explicitly before the script
+    command = ["python", script]  # Explicitly use 'python' to execute the script
+    
+    # Add each argument to the command list in the correct format
+    for arg, value in vars(args).items():
+        if arg not in ["stack_name", "template", "source_bucket", "destination_bucket", "test_file"]:
+            command.append(f"--{arg}")
+            command.append(str(value))  # Ensure the value is in string format
+
+    # Print the command for debugging purposes
+    print(f"Running command: {command}")  # Print the command directly
+    
+    # Run the command to execute the Python script
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        print(f"Error running command: {command}")
+        print(f"Error: {result.stderr.decode()}")
+        raise Exception(f"Command failed: {command}")
+    print(result.stdout.decode())  # Print the successful output from script.py
 
 
-upload file - aws s3 cp C:\Users\anushka.yadav02\Documents\VSCODE\Training-py\Files\Notes.txt.txt s3://your-bucket-name/path/in/bucket/
-
-deploy cmd - python script.py --region ap-south-1 --lambda-file lambda.py --zip-name lambda.zip --template copyTemplate.yaml --stack-name CopyStack1 --lambda-bucket copylambdafuncbucket --source-bucket my-source-bucket-name-12345 --destination-bucket my-destination-bucket-name-12345 --test-file C:\Users\anushka.yadav02\Documents\VSCODE\Training-py\Files\Notes.txt.txt
 
 
 
-python script.py --lambda-directory lambda.py --zip-file-path lambda.zip --lambda-code-bucket copylambdafuncbucket --zip-file-key lambda.zip --region ap-south-1
-aws cloudformation create-stack --stack-name copyStack1 --template-body file://copyTemplate.yaml --capabilities CAPABILITY_IAM --parameters ParameterKey=SourceBucketName,ParameterValue=your-source-bucket-name-12345 ParameterKey=DestinationBucketName,ParameterValue=your-destination-bucket-name-12345 ParameterKey=LambdaCodeBucketName,ParameterValue=copylambdafuncbucket 
-aws cloudformation update-stack --stack-name copyStack1 --template-body file://copyTemplate.yaml --capabilities CAPABILITY_IAM --parameters ParameterKey=SourceBucketName,ParameterValue=your-source-bucket-name-12345 ParameterKey=DestinationBucketName,ParameterValue=your-destination-bucket-name-12345 ParameterKey=LambdaCodeBucketName,ParameterValue=copylambdafuncbucket  
-aws s3 cp "C:\Users\anushka.yadav02\Documents\VSCODE\Training-py\Files\Salary.txt" s3://my-source-bucket-name-12345/ --region ap-south-1 
+# Function to deploy or update the CloudFormation stack
+def deploy_cloudformation(stack_name, template_path, region, source_bucket, dest_bucket, lambda_code_bucket):
+    """Check if the stack exists and create or update it accordingly."""
+    try:
+        # Check if the stack already exists using the describe-stacks command
+        print(f"[*] Checking if stack '{stack_name}' exists...")
+        subprocess.run(
+            ["aws", "cloudformation", "describe-stacks", "--stack-name", stack_name, "--region", region],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        
+        # If the stack exists, update it with new parameters
+        print(f"[+] Stack '{stack_name}' exists. Updating stack...")
+        subprocess.run([
+            "aws", "cloudformation", "update-stack",
+            "--stack-name", stack_name,
+            "--template-body", f"file://{template_path}",
+            "--parameters", 
+            f"ParameterKey=SourceBucketName,ParameterValue={source_bucket}",
+            f"ParameterKey=DestinationBucketName,ParameterValue={dest_bucket}",
+            f"ParameterKey=LambdaCodeBucketName,ParameterValue={lambda_code_bucket}",
+            "--capabilities", "CAPABILITY_IAM",
+            "--region", region
+        ], check=True)
+    
+    except subprocess.CalledProcessError:
+        # If the stack does not exist, create a new stack
+        print(f"[+] Stack '{stack_name}' does not exist. Creating stack...")
+        subprocess.run([
+            "aws", "cloudformation", "create-stack",
+            "--stack-name", stack_name,
+            "--template-body", f"file://{template_path}",
+            "--parameters", 
+            f"ParameterKey=SourceBucketName,ParameterValue={source_bucket}",
+            f"ParameterKey=DestinationBucketName,ParameterValue={dest_bucket}",
+            f"ParameterKey=LambdaCodeBucketName,ParameterValue={lambda_code_bucket}",
+            "--capabilities", "CAPABILITY_IAM",
+            "--region", region
+        ], check=True)
 
-deploy - python deploy.py --lambda-directory lambda.py --zip-file-path lambda.zip --lambda-code-bucket copylambdafuncbucket --zip-file-key lambda.zip --region ap-south-1 --stack-name copyStack2 --template copyTemplate.yaml --source-bucket my-source-bucket-name-12345 --destination-bucket my-destination-bucket-name-12345 --test-file "C:\Users\anushka.yadav02\Documents\VSCODE\Training-py\Files\Salary.txt"
+# Function to upload the test file to the source S3 bucket
+def upload_test_file(source_bucket, test_file, region):
+    """Upload the test file to the source bucket."""
+    print(f"[*] Uploading test file '{test_file}' to S3 bucket '{source_bucket}'...")
+    
+    # Use AWS CLI to upload the test file to the specified S3 bucket
+    run_subprocess(["aws", "s3", "cp", test_file, f"s3://{source_bucket}/", "--region", region])
+    
+    # Confirm successful upload
+    print("[✓] Test file uploaded successfully.")
 
+# Main function to control the flow of the script
+def main():
+    # Step 1: Parse the command-line arguments
+    args = parse_args()
 
+    # Step 2: Run the Python script (script.py) to zip Lambda function and upload to S3
+    print("[*] Running the Python script to zip Lambda function and upload to S3...")
+    run_python_script('script.py', args)
 
+    # Step 3: Deploy or update the CloudFormation stack
+    print("[*] Deploying or updating CloudFormation stack...")
+    deploy_cloudformation(
+        args.stack_name,
+        args.template,
+        args.region,
+        args.source_bucket,
+        args.destination_bucket,
+        args.lambda_code_bucket
+    )
 
+    # Step 4: Upload the test file to the source S3 bucket
+    upload_test_file(args.source_bucket, args.test_file, args.region)
 
+    # Print a success message indicating that the deployment is complete
+    print("[✓] Deployment complete!")
+
+# Entry point of the script when executed
+if __name__ == "__main__":
+    main()
 
 
 
