@@ -7,15 +7,17 @@ import argparse
 import time
 import io
 
+# Initialize AWS clients
 s3 = boto3.client('s3')
 cloudformation = boto3.client('cloudformation')
+
+# Define the Lambda code bucket directly in the code
+LAMBDA_CODE_BUCKET = "copylambdafuncbucket"  # Replace with your actual bucket name
 
 def parse_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Deploy Lambda function to S3.")
-    parser.add_argument('--lambda-file', required=True, help="Directory containing the Lambda function code")
-    # parser.add_argument('--zip-file-path', required=True, help="Path to the output ZIP file")
-    parser.add_argument('--lambda-code-bucket', required=True, help="S3 bucket name to store Lambda code")
+    parser.add_argument('--lambda-file', required=True, help="Lambda function file (e.g., lambda.py)")
     parser.add_argument('--zip-file-key', required=True, help="Key (path) for the file in the S3 bucket")
     parser.add_argument('--region', required=True, help="AWS region where the bucket is located (e.g., us-east-1)")
     
@@ -55,8 +57,7 @@ def create_s3_bucket_if_not_exists(bucket_name, region):
         print(f"Bucket '{bucket_name}' already exists.")
     except ClientError as e:
         if e.response['Error']['Code'] == '404':
-            print(f"Bucket '{bucket_name}' does not exist. Creating now...")
-            
+            print(f"Bucket '{bucket_name}' does not exist. Creating now...")            
             s3.create_bucket(
                 Bucket=bucket_name,
                 CreateBucketConfiguration={'LocationConstraint': region} 
@@ -69,11 +70,9 @@ def create_s3_bucket_if_not_exists(bucket_name, region):
 def upload_zip_to_s3(bucket_name, zip_buffer, zip_file_key):
     """Uploads the ZIP file to the S3 bucket if it doesn't already exist."""
     try:
-        
         s3.head_object(Bucket=bucket_name, Key=zip_file_key)
         print(f"File '{zip_file_key}' already exists in bucket '{bucket_name}'.")
     except s3.exceptions.ClientError as e:
-        
         print(f"Uploading in-memory ZIP file '{zip_file_key}' to bucket '{bucket_name}'...")
         s3.upload_fileobj(zip_buffer, bucket_name, zip_file_key)
         print(f"File '{zip_file_key}' uploaded successfully.")
@@ -113,7 +112,6 @@ def run_aws_boto3_command(stack_name, template, source_bucket, destination_bucke
     skip_waiting = False  
     try:
         if not stack_exists:
-           
             print(f"Creating CloudFormation stack '{stack_name}'...")
             response = cloudformation.create_stack(
                 StackName=stack_name,
@@ -127,7 +125,6 @@ def run_aws_boto3_command(stack_name, template, source_bucket, destination_bucke
             )
             print(f"CloudFormation stack '{stack_name}' creation initiated.")
         else:
-           
             print(f"Updating CloudFormation stack '{stack_name}'...")
             try:
                 response = cloudformation.update_stack(
@@ -142,13 +139,11 @@ def run_aws_boto3_command(stack_name, template, source_bucket, destination_bucke
                 )
                 print(f"CloudFormation stack '{stack_name}' update initiated.")
             except cloudformation.exceptions.ClientError as e:
-                
                 if 'No updates are to be performed' in str(e):
                     print(f"CloudFormation stack '{stack_name}' is already up to date. No update necessary.")
                     skip_waiting = True 
                     return skip_waiting 
                 else:
-                   
                     print(f"Error with CloudFormation stack '{stack_name}': {e}")
                     raise e
     except ClientError as e:
@@ -166,24 +161,27 @@ def upload_file_to_s3(file_path, bucket_name, file_key, region):
 def main():
     args = parse_args()
 
-   
-    # zip_lambda_function(args.lambda_directory, args.zip_file_path)
+    # Zip the Lambda function file in memory
     zip_buffer = create_in_memory_zip(args.lambda_file)
     if not zip_buffer:
         print("Failed to create in-memory ZIP file. Exiting...")
         return
     
-    create_s3_bucket_if_not_exists(args.lambda_code_bucket, args.region)
+    # Create the Lambda code bucket if it doesn't exist
+    create_s3_bucket_if_not_exists(LAMBDA_CODE_BUCKET, args.region)
 
-    
-    upload_zip_to_s3(args.lambda_code_bucket, zip_buffer, args.zip_file_key)
+    # Upload the ZIP file to the S3 bucket
+    upload_zip_to_s3(LAMBDA_CODE_BUCKET, zip_buffer, args.zip_file_key)
 
+    # Check if the CloudFormation stack exists and create/update it
     stack_exists = check_stack_exists(args.stack_name)
 
-    skip_waiting = run_aws_boto3_command(args.stack_name, args.template, args.source_bucket, args.destination_bucket, args.lambda_code_bucket, stack_exists)
+    skip_waiting = run_aws_boto3_command(args.stack_name, args.template, args.source_bucket, args.destination_bucket, LAMBDA_CODE_BUCKET, stack_exists)
 
+    # Wait for stack creation or update to complete
     wait_for_stack_creation_or_update(args.stack_name, stack_exists, skip_waiting)
 
+    # Upload the test file to the source bucket
     upload_file_to_s3(args.test_file, args.source_bucket, os.path.basename(args.test_file), args.region)
 
 if __name__ == "__main__":
