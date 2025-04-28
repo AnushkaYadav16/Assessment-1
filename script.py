@@ -81,36 +81,73 @@ def check_stack_exists(stack_name):
         else:
             raise e  # Re-raise any other error
 
-def wait_for_stack_creation(stack_name):
-    """Waits until the CloudFormation stack has been created or updated."""
-    print(f"Waiting for CloudFormation stack '{stack_name}' to be created/updated...")
-    while True:
-        try:
-            response = cloudformation.describe_stacks(StackName=stack_name)
-            stack_status = response['Stacks'][0]['StackStatus']
-            print(f"Current stack status: {stack_status}")
-            if stack_status in ['CREATE_COMPLETE', 'UPDATE_COMPLETE']:
-                print(f"Stack '{stack_name}' created/updated successfully.")
-                break
-            elif stack_status in ['CREATE_FAILED', 'UPDATE_FAILED']:
-                print(f"Stack creation/update failed. Status: {stack_status}")
-                raise Exception(f"Stack creation/update failed: {stack_status}")
-            time.sleep(30)  # Wait before checking again
-        except Exception as e:
-            print(f"Error while checking stack status: {e}")
-            raise
+def wait_for_stack_creation_or_update(stack_name, stack_exists, skip_waiting):
+    """Wait for CloudFormation stack to be created or updated."""
+    if skip_waiting:
+        return  # Skip waiting if no update was necessary
 
-def run_aws_cli_command(command):
-    """Run the AWS CLI command."""
-    print(f"Running command: {' '.join(command)}")
-    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if stack_exists:
+        print(f"Waiting for CloudFormation stack '{stack_name}' to be updated...")
+        waiter = cloudformation.get_waiter('stack_update_complete')
+    else:
+        print(f"Waiting for CloudFormation stack '{stack_name}' to be created...")
+        waiter = cloudformation.get_waiter('stack_create_complete')
     
-    if result.returncode != 0:
-        print(f"Error running command: {' '.join(command)}")
-        print(f"Error: {result.stderr.decode()}")
-        raise Exception(f"Command failed: {' '.join(command)}")
-    
-    print(result.stdout.decode())  # Print successful output
+    try:
+        waiter.wait(StackName=stack_name)
+        print(f"CloudFormation stack '{stack_name}' operation completed successfully.")
+    except cloudformation.exceptions.WaiterError as e:
+        print(f"Error while waiting for stack '{stack_name}': {e}")
+        raise
+
+def run_aws_boto3_command(stack_name, template, source_bucket, destination_bucket, lambda_code_bucket, stack_exists):
+    """Run the CloudFormation command using Boto3 (create-stack or update-stack)."""
+    skip_waiting = False  # Flag to control whether waiting should be skipped
+    try:
+        if not stack_exists:
+            # If stack doesn't exist, create a new stack
+            print(f"Creating CloudFormation stack '{stack_name}'...")
+            response = cloudformation.create_stack(
+                StackName=stack_name,
+                TemplateBody=open(template, 'r').read(),
+                Capabilities=['CAPABILITY_IAM'],
+                Parameters=[
+                    {'ParameterKey': 'SourceBucketName', 'ParameterValue': source_bucket},
+                    {'ParameterKey': 'DestinationBucketName', 'ParameterValue': destination_bucket},
+                    {'ParameterKey': 'LambdaCodeBucketName', 'ParameterValue': lambda_code_bucket}
+                ]
+            )
+            print(f"CloudFormation stack '{stack_name}' creation initiated.")
+        else:
+            # If stack exists, update the stack
+            print(f"Updating CloudFormation stack '{stack_name}'...")
+            try:
+                response = cloudformation.update_stack(
+                    StackName=stack_name,
+                    TemplateBody=open(template, 'r').read(),
+                    Capabilities=['CAPABILITY_IAM'],
+                    Parameters=[
+                        {'ParameterKey': 'SourceBucketName', 'ParameterValue': source_bucket},
+                        {'ParameterKey': 'DestinationBucketName', 'ParameterValue': destination_bucket},
+                        {'ParameterKey': 'LambdaCodeBucketName', 'ParameterValue': lambda_code_bucket}
+                    ]
+                )
+                print(f"CloudFormation stack '{stack_name}' update initiated.")
+            except cloudformation.exceptions.ClientError as e:
+                # Handle "No updates are to be performed" error and print a message
+                if 'No updates are to be performed' in str(e):
+                    print(f"CloudFormation stack '{stack_name}' is already up to date. No update necessary.")
+                    skip_waiting = True  # Skip waiting if no updates are required
+                    return skip_waiting  # Early exit as no updates were needed
+                else:
+                    # Reraise the exception if it's a different error
+                    print(f"Error with CloudFormation stack '{stack_name}': {e}")
+                    raise e
+    except ClientError as e:
+        print(f"Error with CloudFormation stack '{stack_name}': {e}")
+        raise e
+
+    return skip_waiting  # Return skip_waiting flag for further checks
 
 def upload_file_to_s3(file_path, bucket_name, file_key, region):
     """Uploads a file to S3."""
@@ -134,26 +171,14 @@ def main():
     # Step 4: Check if the CloudFormation stack exists and either create or update the stack
     stack_exists = check_stack_exists(args.stack_name)
 
-    aws_cli_command = [
-        'aws', 'cloudformation', 'create-stack' if not stack_exists else 'update-stack',
-        '--stack-name', args.stack_name,
-        '--template-body', f'file://{args.template}',
-        '--capabilities', 'CAPABILITY_IAM',
-        '--parameters',
-        f'ParameterKey=SourceBucketName,ParameterValue={args.source_bucket}',
-        f'ParameterKey=DestinationBucketName,ParameterValue={args.destination_bucket}',
-        f'ParameterKey=LambdaCodeBucketName,ParameterValue={args.lambda_code_bucket}'
-    ]
+    # Run CloudFormation create/update stack
+    skip_waiting = run_aws_boto3_command(args.stack_name, args.template, args.source_bucket, args.destination_bucket, args.lambda_code_bucket, stack_exists)
 
-    run_aws_cli_command(aws_cli_command)
-
-    # Step 5: Wait for CloudFormation stack creation or update to complete
-    wait_for_stack_creation(args.stack_name)
+    # Step 5: Wait for CloudFormation stack creation or update to complete (if update occurred)
+    wait_for_stack_creation_or_update(args.stack_name, stack_exists, skip_waiting)
 
     # Step 6: Upload the test file to the source bucket
     upload_file_to_s3(args.test_file, args.source_bucket, os.path.basename(args.test_file), args.region)
 
 if __name__ == "__main__":
     main()
-
-

@@ -69,7 +69,7 @@ Resources:
     Properties:
       Handler: 'lambda.lambda_handler'
       Role: !GetAtt LambdaExecutionRole.Arn
-      FunctionName: 'S2CopyFunction'
+      FunctionName: 'S1CopyFunction'
       Runtime: 'python3.8'
       Code:
         S3Bucket: !Ref LambdaCodeBucketName  
