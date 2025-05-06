@@ -14,7 +14,6 @@ Parameters:
 
 Resources:
   
-  # S3 Bucket 1 (Source Bucket)
   SourceBucket:
     Type: 'AWS::S3::Bucket'
     Properties:
@@ -24,19 +23,11 @@ Resources:
           - Event: 's3:ObjectCreated:*'
             Function: !GetAtt S3CopyLambda.Arn
 
-  # S3 Bucket 2 (Destination Bucket)
   DestinationBucket:
     Type: 'AWS::S3::Bucket'
     Properties:
       BucketName: !Ref DestinationBucketName
 
-  # S3 Bucket for Lambda Code (to store Lambda zip)
-  # LambdaCodeBucket:
-  #   Type: 'AWS::S3::Bucket'
-  #   Properties:
-  #     BucketName: !Ref LambdaCodeBucketName
-
-  # Lambda Execution Role for Permissions
   LambdaExecutionRole:
     Type: 'AWS::IAM::Role'
     Properties:

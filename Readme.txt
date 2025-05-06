@@ -4,3 +4,4 @@ create/update stack => python script.py --lambda-file lambda.py --zip-file-key l
 upload file => aws s3 cp "C:\Users\anushka.yadav02\Documents\VSCODE\Training-py\Files\Salary.txt" s3://my-source-bucket-name-12345/ --region ap-south-1 
 
 delete stack => aws cloudformation delete-stack --stack-name copyStack3
+

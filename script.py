@@ -7,12 +7,10 @@ import argparse
 import time
 import io
 
-# Initialize AWS clients
 s3 = boto3.client('s3')
 cloudformation = boto3.client('cloudformation')
 
-# Define the Lambda code bucket directly in the code
-LAMBDA_CODE_BUCKET = "copylambdafuncbucket"  # Replace with your actual bucket name
+LAMBDA_CODE_BUCKET = "copylambdafuncbucket" 
 
 def parse_args():
     """Parse command-line arguments."""
@@ -161,27 +159,21 @@ def upload_file_to_s3(file_path, bucket_name, file_key, region):
 def main():
     args = parse_args()
 
-    # Zip the Lambda function file in memory
     zip_buffer = create_in_memory_zip(args.lambda_file)
     if not zip_buffer:
         print("Failed to create in-memory ZIP file. Exiting...")
         return
     
-    # Create the Lambda code bucket if it doesn't exist
     create_s3_bucket_if_not_exists(LAMBDA_CODE_BUCKET, args.region)
 
-    # Upload the ZIP file to the S3 bucket
     upload_zip_to_s3(LAMBDA_CODE_BUCKET, zip_buffer, args.zip_file_key)
 
-    # Check if the CloudFormation stack exists and create/update it
     stack_exists = check_stack_exists(args.stack_name)
 
     skip_waiting = run_aws_boto3_command(args.stack_name, args.template, args.source_bucket, args.destination_bucket, LAMBDA_CODE_BUCKET, stack_exists)
 
-    # Wait for stack creation or update to complete
     wait_for_stack_creation_or_update(args.stack_name, stack_exists, skip_waiting)
 
-    # Upload the test file to the source bucket
     upload_file_to_s3(args.test_file, args.source_bucket, os.path.basename(args.test_file), args.region)
 
 if __name__ == "__main__":
